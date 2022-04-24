@@ -1,6 +1,7 @@
 import numpy as np
 import argparse
 import os, sys
+import gc
 
 import torch
 import torch.nn as nn
@@ -10,6 +11,8 @@ from torch.utils.data.dataloader import DataLoader
 from dataloader.data_transforms import *
 from model.yolov3 import *
 from train.trainer import *
+
+from tensorboardX import SummaryWriter
 
 def parse_args():
     parser = argparse.ArgumentParser(description="YOLOV3_PYTORCH arguments")
@@ -24,7 +27,27 @@ def parse_args():
     args=parser.parse_args()
     return args
 
-def train(cfg_param = None, using_gpus = None):
+def collate_fn(batch):
+    batch = [data for data in batch if data is not None]
+
+    # skip invaild data
+    if len(batch) == 0:
+        return
+
+    imgs, targets, anno_path = list(zip(*batch))
+
+    imgs = torch.stack([img for img in imgs])
+
+    for i, boxes in enumerate(targets):
+
+        # insert index of batch
+        boxes[:,0] = i
+
+    targets = torch.cat(targets, 0)
+
+    return imgs, targets, anno_path
+
+def train(cfg_param = None, using_gpus = None): # cfg_param : net dictionary4
     print("train")
     my_transform = get_transformations(cfg_param = cfg_param, is_train=True)
 
@@ -36,15 +59,31 @@ def train(cfg_param = None, using_gpus = None):
                             num_workers=0,
                             pin_memory = True,
                             drop_last = True,
-                            shuffle = True)
+                            shuffle = True,
+                            collate_fn = collate_fn)
+
 
     model = Darknet53(args.cfg, cfg_param, training=True)
     model.train()
     model.initialize_weights()
 
-    trainer = Trainer(model=model, train_loader=train_loader, eval_loader=None, hparam=cfg_param)
-    trainer.run()
+    # set divice
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")
+    else:
+        device = torch.device("cpu")
 
+    model = model.to(device)
+
+    torch_writer = SummaryWriter("./output")
+
+    trainer = Trainer(model=model,
+                    train_loader=train_loader,
+                    eval_loader=None,
+                    hparam=cfg_param,
+                    device = device,
+                    torch_writer=torch_writer)
+    trainer.run()
 
 def eval(cfg_param = None, using_gpus = None):
     print("eval")
@@ -61,8 +100,8 @@ if __name__ == "__main__":
     args = parse_args()
 
     #cfg parser
-    net_data = parse_hyperparam_config(args.cfg)
-    cfg_param = get_hyperparam(net_data)
+    net_data = parse_hyperparam_config(args.cfg) # net layer의 정보
+    cfg_param = get_hyperparam(net_data) # 구해진 net layer의 정보를 dictionary로
 
     using_gpus = [int(g) for g in args.gpus]
 
