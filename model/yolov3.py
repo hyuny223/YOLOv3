@@ -74,8 +74,8 @@ class Yololayer(nn.Module):
         # [batch, box_attrib * anchor의 수(3개), height, lw, lh] e.g. [1,39,19,19]
         # self.box_attrib = self.n_classes + x, y, w, h + objectness. 즉, 앵커 하나당 채널 수
 
-        # 4dim [batch, box_atrrib * anchor, lw, lh ] → 5dim [batch, anchor, box_attrib, lw, lh]
-        # → [batch, anchor, lw, lh, box_attrib]
+        # 4dim [batch, box_atrrib * anchor, lh, lw ] → 5dim [batch, anchor, box_attrib, lh, lw]
+        # → [batch, anchor, lh, lw, box_attrib]
 
         # self.anchor.shape[0] = 앵커의 개수(3)
         x = x.view(-1, self.anchor.shape[0], self.box_attr, self.lh, self.lw).permute(0,1,3,4,2).contiguous()
