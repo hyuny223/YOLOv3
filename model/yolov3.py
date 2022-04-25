@@ -93,7 +93,9 @@ class Darknet53(nn.Module):
         self.n_classes = int(param['classes']) # 8
         self.module_cfg = parse_model_config(cfg) # tools.py에서 제작한 cfg 정보를 담은 layer에 대한 dictionary list를 self.module_cfg에 할당
         self.module_list = self.set_layer(self.module_cfg) # module_list
-        self.yolo_layers = [layer[0] for layer in self.module_list if isinstance(layer[0], Yololayer)] # self.module_list의 요소가 Yololayer라면 할당?
+        self.yolo_layers = [layer[0] for layer in self.module_list if isinstance(layer[0], Yololayer)] 
+        # layer[0]이 Yololayer라면 Yololayer class를 할당.
+        # 한 레이어에는 conv, batchnorm, activation 등이 있는데, 그 중 맨 앞인 conv와 갖은 것을 가리킨다.
         self.training = training
 
     def set_layer(self, layer_info): # layer_info란, self.module_cfg로서, cfg파일을 dictionary list로 만든 것이다.
@@ -107,7 +109,7 @@ class Darknet53(nn.Module):
 
             if info["type"] == "convolutional": # 이번 레이어의 이름이 conv라면 # idx, module, layer_info, channel
                 make_conv_layer(layer_idx, modules, info, in_channels[-1])
-                in_channels.append(int(info["filters"])) # 레이어에 필요한 filters를 append
+                in_channels.append(int(info["filters"])) # 레이어에 필요한 filters를 append. output의 채널수
 
             elif info["type"] == "shortcut": # 이번 레이어의 이름이 shortcut이라면
                 make_shortcut_layer(layer_idx, modules)
@@ -130,7 +132,7 @@ class Darknet53(nn.Module):
                 modules.add_module("layer_" + str(layer_idx) +"_yolo", yololayer) # Adds a child module to the current module. add_module(name, module)
                 in_channels.append(in_channels[-1]) # 이전 레이어와 동일한 채널 수를 갖는다.
 
-            module_list.append(modules) # 모듈 리스트에, add된 modules를 할당.
+            module_list.append(modules) # 모듈 리스트에, modules를 add한 nn.Sequential()를 할당.
 
         return module_list
 
@@ -151,31 +153,42 @@ class Darknet53(nn.Module):
                 nn.init.kaiming_uniform_(m.weight)
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, x):
+    def forward(self, x): # 여기서 x는 무엇일까? input image인 것 같은데, 어디서 들어오는 거지?
+
         yolo_result = []
         layer_result = []
 
-        for idx, (name, layer) in enumerate(zip(self.module_cfg, self.module_list)):
+        # self.module_cfg : tools.py에서 제작한 cfg 정보를 담은 layer에 대한 dictionary list를 self.module_cfg에 할당
+ 
+
+        for idx, (name, layer) in enumerate(zip(self.module_cfg, self.module_list)): # layer는 nn.Sequential()에 추가된 하나의 레이어를 의미한다 
             if name["type"] == "convolutional":
-                x = layer(x)
+                x = layer(x) # conv 레이어에 이미지 input
                 layer_result.append(x)
 
             elif name["type"] == "shortcut":
-                x = x + layer_result[int(name["from"])]
+                x = x + layer_result[int(name["from"])] # input 이미지와 from번째 layer를 add
                 layer_result.append(x)
 
             elif name["type"] == "yolo":
-                yolo_x = layer(x)
+                yolo_x = layer(x) # Yololayer에 이미지를 input. yolo_x는 [batch, anchor, row, col, (coord 4 + obectness 1 + n_classes 8)]
+                # print("-----------------------------")
+                # print("-----------------------------")
+                # print(f"yolo_x : \n {yolo_x}")
+                # print(f"yolo_x.shape : \n {yolo_x.shape}")
+                # print("-----------------------------")
+                # print("-----------------------------")
+                # sys.exit(1)
                 layer_result.append(yolo_x)
                 yolo_result.append(yolo_x)
 
             elif name["type"] == "upsample":
-                x = layer(x)
+                x = layer(x) # Unsample 레이어에 이미지 input
                 layer_result.append(x)
 
             elif name["type"] == "route":
-                layers = [int(y) for y in name["layers"].split(',')]
-                x = torch.cat([layer_result[l] for l in layers], dim=1)
+                layers = [int(y) for y in name["layers"].split(',')] # 여러 개의 n번째 레이어의 번호(1개일 수도, 2개일 수도)
+                x = torch.cat([layer_result[l] for l in layers], dim=1) # [batch, channel, row, col] 에서, 채널 방향으로 n번째 layer를 concat
                 layer_result.append(x)
 
-        return yolo_result
+        return yolo_result #yolo, 즉 feature map만 저장 

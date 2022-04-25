@@ -54,6 +54,9 @@ def train(cfg_param = None, using_gpus = None): # cfg_param : net dictionary4
     train_data = Yolodata(is_train=True,
                         transform=my_transform,
                         cfg_param=cfg_param)
+    # Yolodata returns img, target_data, anno_path
+    # target_data = [batch_idx, class, center_x, center_y, width, height]
+
     train_loader = DataLoader(train_data,
                             batch_size = cfg_param['batch'],
                             num_workers=0,
@@ -62,8 +65,7 @@ def train(cfg_param = None, using_gpus = None): # cfg_param : net dictionary4
                             shuffle = True,
                             collate_fn = collate_fn)
 
-
-    model = Darknet53(args.cfg, cfg_param, training=True)
+    model = Darknet53(args.cfg, cfg_param, training=True) # Darknet53 초기화
     model.train()
     model.initialize_weights()
 

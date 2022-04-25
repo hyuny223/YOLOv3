@@ -12,7 +12,7 @@ from train.loss import *
 class Trainer:
 
     def __init__(self, model, train_loader, eval_loader, hparam, device, torch_writer):
-        self.model = model
+        self.model = model # 초기화된 Darknet53 모델
         self.train_loader = train_loader
         self.eval_loader = eval_loader
         self.max_batch = hparam["max_batch"]
@@ -35,13 +35,18 @@ class Trainer:
                 continue
 
             input_img, targets, anno_path = batch
-
+            # targets = [batch_idx, cls, center_x, center_y, width, height]
+            # targets의 row는 바운딩 박스의 갯수이다. 
+            # input_img는 jpg or png 파일을 RBG로 uchar 형식으로 np.array로 만든 데이터이다
+            
             input_img = input_img.to(self.device, non_blocking=True)
 
-            output = self.model(input_img) # prediction
+            output = self.model(input_img) # prediction. return yolo_result
+            # 즉, 초기화된 Darknet53 모델에 input_img를 넣어 feature map을 담은 list를 출력한다 
 
             # get loss between output and target
             loss, loss_list = self.yololoss.compute_loss(output, targets, self.model.yolo_layers) # pred, target, yololayer. compute의 return은 loss, loss_list
+            # yololayer = [Yololayer(), Yololayer(), Yololayer()]
 
             # get gradients
             loss.backward()
